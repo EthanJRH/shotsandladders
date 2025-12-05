@@ -8,6 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass
 from abc import ABC
+from typing import Any
 import random
 import json
 import logging
@@ -95,6 +96,8 @@ class RectangleBoard(Board):
 
         self.traversal_order = order
 
+        self._index_to_snake_pos: dict[int, int] = {idx: pos for pos, idx in enumerate(order)}
+
         # link prev_id/next_id along the traversal order
         for pos, phys_id in enumerate(order):
             self.spaces[phys_id].snake_id = pos
@@ -106,32 +109,6 @@ class RectangleBoard(Board):
         # mark start / end
         self.spaces[order[0]].contents = SpaceContents.START
         self.spaces[order[-1]].contents = SpaceContents.END
-
-    # @classmethod
-    # def rectangular(cls, width: int, height: int) -> RectangleBoard:
-    #     return cls(width, height)
-
-    def index_to_grid(self, index: int) -> tuple[int, int]:
-        """convert a space id to (row, col) in the rectangular grid (visual left->right)."""
-        if self.width is None or self.height is None or self.traversal_order is None:
-            raise ValueError("board is not rectangular")
-        if index < 0 or index >= self.size:
-            raise IndexError("index out of bounds")
-
-        snake_pos = self.traversal_order.index(index)
-        row = snake_pos // self.width
-        col_in_row = snake_pos % self.width
-        col = (self.width - 1 - col_in_row) if (row % 2 == 1) else col_in_row
-        return (row, col)
-
-    def grid_to_index(self, row: int, col: int) -> int:
-        """convert visual (row, col) to physical id (row-major)."""
-        if self.width is None or self.height is None:
-            raise ValueError("board is not rectangular")
-        if row < 0 or row >= self.height or col < 0 or col >= self.width:
-            raise IndexError("row/col out of bounds")
-        phys_col = (self.width - 1 - col) if (row % 2 == 1) else col
-        return row * self.width + phys_col
 
 
 @dataclass
@@ -164,6 +141,10 @@ class Game:
         return cls(board)
     
     def add_player(self, name: str) -> None:
+        if any(p.name == name for p in self.players):
+            raise ValueError(f"player with name {name} already exists")
+        if self.winner is not None:
+            raise ValueError("cannot add player to finished game")
         start_space = self.board.get_space(0)
         piece = Piece(location=start_space)
         player = Player(name=name, piece=piece)
@@ -176,6 +157,8 @@ class Game:
         self.player_up = (self.player_up + 1) % len(self.players)
     
     def take_turn(self, steps: int) -> int:
+        if steps < 1:
+            raise ValueError("steps must be at least 1")
         player = self.get_current_player()
         self.move_player(player, steps)
         player.turns_taken += 1
@@ -234,7 +217,7 @@ class Game:
             return self.board.get_space(space.jump_to)
         return None
     
-    def get_game_state(self) -> dict:
+    def get_game_state(self) -> dict[str, Any]:
         state = {
             "board_size": self.board.size,
             "winner": self.winner.name if self.winner else None,
@@ -261,7 +244,6 @@ class GameSimulator:
         print("initial game state:", json.dumps(self.game.get_game_state(), indent=2))
 
         while self.game.winner is None:
-            self.game.get_current_player()
             self.game.roll_dice_take_turn()
 
         print(f"player {self.game.winner.name} wins!")
