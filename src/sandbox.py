@@ -29,8 +29,8 @@ class Space:
     jump_to: int | None = None
 
 class Board(ABC):
-    """Base board: owns a list of Space objects and common helpers.
-    Subclasses provide layout/geometry (e.g. RectangleBoard).
+    """base board: owns a list of Space objects and common helpers.
+    subclasses provide layout/geometry (e.g. RectangleBoard).
     """
     def __init__(self, spaces: list[Space] | None = None):
         self.spaces: list[Space] = spaces if spaces is not None else []
@@ -41,18 +41,26 @@ class Board(ABC):
         return len(self.spaces)
 
     def add_jump(self, from_id: int, to_id: int) -> None:
-        """Add a chute/ladder from one space id to another."""
+        """add a chute/ladder from one space id to another."""
         if from_id < 0 or from_id >= self.size:
             raise IndexError("from_id out of bounds")
         if to_id < 0 or to_id >= self.size:
             raise IndexError("to_id out of bounds")
         self.spaces[from_id].jump_to = to_id
 
+    def add_shot(self, id: int, shot_type: SpaceContents) -> None:
+        """add a shot space at the given id."""
+        if id < 0 or id >= self.size:
+            raise IndexError("id out of bounds")
+        if shot_type not in {SpaceContents.SHOT, SpaceContents.DOUBLE_SHOT, SpaceContents.FRIEND_SHOT}:
+            raise ValueError("invalid shot_type")
+        self.spaces[id].contents = shot_type
+
     def get_space(self, id: int) -> Space:
         return self.spaces[id]
 
 class RectangleBoard(Board):
-    """Rectangular board with serpentine (snake) traversal.
+    """rectangular board with serpentine (snake) traversal.
 
     - spaces stored in physical row-major order: id = row * width + col
     - traversal_order lists ids in play order (snake)
@@ -95,9 +103,9 @@ class RectangleBoard(Board):
     #     return cls(width, height)
 
     def index_to_grid(self, index: int) -> tuple[int, int]:
-        """Convert a space id to (row, col) in the rectangular grid (visual left->right)."""
+        """convert a space id to (row, col) in the rectangular grid (visual left->right)."""
         if self.width is None or self.height is None or self.traversal_order is None:
-            raise ValueError("Board is not rectangular")
+            raise ValueError("board is not rectangular")
         if index < 0 or index >= self.size:
             raise IndexError("index out of bounds")
 
@@ -108,9 +116,9 @@ class RectangleBoard(Board):
         return (row, col)
 
     def grid_to_index(self, row: int, col: int) -> int:
-        """Convert visual (row, col) to physical id (row-major)."""
+        """convert visual (row, col) to physical id (row-major)."""
         if self.width is None or self.height is None:
-            raise ValueError("Board is not rectangular")
+            raise ValueError("board is not rectangular")
         if row < 0 or row >= self.height or col < 0 or col >= self.width:
             raise IndexError("row/col out of bounds")
         phys_col = (self.width - 1 - col) if (row % 2 == 1) else col
@@ -208,6 +216,7 @@ class Game:
     def get_game_state(self) -> dict:
         state = {
             "board_size": self.board.size,
+            "winner": self.winner.name if self.winner else None,
             "players": [
                 {
                     "name": player.name,
@@ -227,20 +236,27 @@ class GameSimulator:
         self.game = game
 
     def simulate_game(self) -> None:
-        print("Initial game state:", json.dumps(self.game.get_game_state(), indent=2))
+        print("initial game state:", json.dumps(self.game.get_game_state(), indent=2))
 
         while self.game.winner is None:
-            steps = self.game.roll_dice_take_turn()
             current_player = self.game.get_current_player()
-            print(f"Player {current_player.name} rolled {steps} and moved to space {current_player.piece.location.snake_id} (id {current_player.piece.location.id})")
+            steps = self.game.roll_dice_take_turn()
+            msg = f"player {current_player.name} rolled {steps} and moved to space {current_player.piece.location.snake_id} (id {current_player.piece.location.id})"
+            if current_player.piece.location.contents in {SpaceContents.SHOT, SpaceContents.DOUBLE_SHOT, SpaceContents.FRIEND_SHOT}:
+                msg += f" and hit a {current_player.piece.location.contents.value.lower().replace("_", " ")}!"
+            print(msg)
 
-        print(f"Player {self.game.winner.name} wins!")
-        print("Final game state:", json.dumps(self.game.get_game_state(), indent=2))
+        print(f"player {self.game.winner.name} wins!")
+        print("final game state:", json.dumps(self.game.get_game_state(), indent=2))
 
 
 def main():
     game = Game.with_rectangle_board(5, 5)
-    game.add_player("Alice")
+    game.add_player("alice")
+    game.board.add_shot(23, SpaceContents.SHOT)
+    game.board.add_shot(22, SpaceContents.SHOT)
+    game.board.add_shot(21, SpaceContents.SHOT)
+    game.board.add_shot(20, SpaceContents.SHOT)
     gs = GameSimulator(game)
     gs.simulate_game()
     
