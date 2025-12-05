@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from abc import ABC
 import random
 import json
+import logging
+
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
+
 
 class SpaceContents(Enum):
     START = "START"
@@ -17,6 +23,7 @@ class SpaceContents(Enum):
     SHOT = "SHOT"
     DOUBLE_SHOT = "DOUBLE_SHOT"
     FRIEND_SHOT = "FRIEND_SHOT"
+
 
 @dataclass
 class Space:
@@ -27,6 +34,7 @@ class Space:
     prev_id: int | None = None
     next_id: int | None = None
     jump_to: int | None = None
+
 
 class Board(ABC):
     """base board: owns a list of Space objects and common helpers.
@@ -58,6 +66,7 @@ class Board(ABC):
 
     def get_space(self, id: int) -> Space:
         return self.spaces[id]
+
 
 class RectangleBoard(Board):
     """rectangular board with serpentine (snake) traversal.
@@ -123,10 +132,12 @@ class RectangleBoard(Board):
             raise IndexError("row/col out of bounds")
         phys_col = (self.width - 1 - col) if (row % 2 == 1) else col
         return row * self.width + phys_col
-    
+
+
 @dataclass
 class Piece:
     location: Space
+
 
 @dataclass
 class Player:
@@ -138,6 +149,7 @@ class Player:
 
     def take_shot(self) -> None:
         self.shots_taken += 1
+
 
 class Game:
     def __init__(self, board: Board):
@@ -169,6 +181,7 @@ class Game:
         player.turns_taken += 1
         player.spaces_moved += steps
         if player.piece.location.contents == SpaceContents.END:
+            logger.info(f"player {player.name} has reached the end and wins the game!")
             self.winner = player
         self.set_next_player()
         return steps
@@ -188,30 +201,38 @@ class Game:
             else:
                 current_space = self.board.get_space(current_space.next_id)
 
+        logger.info(f"player {player.name} moved {steps} steps to space {current_space.snake_id} (id {current_space.id})")
+
         self.check_for_shots(player, current_space)
 
-        if self.check_for_jumps(player, current_space):
-            self.check_for_shots(player, current_space)
+        jump_space: Space | None = self.check_for_jumps(current_space)
 
-        player.piece.location = current_space
+        if jump_space:
+            logger.info(f"player {player.name} jumps to space {jump_space.snake_id} (id {jump_space.id})")
+            self.check_for_shots(player, jump_space)
+            player.piece.location = jump_space
+        else:
+            player.piece.location = current_space
 
     @staticmethod
     def check_for_shots(player: Player, space: Space) -> None:
         if space.contents == SpaceContents.SHOT:
+            logger.info(f"player {player.name} takes a shot")
             player.take_shot()
         elif space.contents == SpaceContents.DOUBLE_SHOT:
+            logger.info(f"player {player.name} takes a double shot")
             player.take_shot()
             player.take_shot()
         elif space.contents == SpaceContents.FRIEND_SHOT:
             # TODO: implement friend shot logic
+            logger.info(f"player {player.name} takes a friend shot")
             player.take_shot()
             player.take_shot()
 
-    def check_for_jumps(self, player: Player, space: Space) -> bool:
+    def check_for_jumps(self, space: Space) -> Space | None:
         if space.jump_to is not None:
-            player.piece.location = self.board.get_space(space.jump_to)
-            return True
-        return False
+            return self.board.get_space(space.jump_to)
+        return None
     
     def get_game_state(self) -> dict:
         state = {
@@ -230,7 +251,8 @@ class Game:
             ]
         }
         return state
-    
+
+
 class GameSimulator:
     def __init__(self, game: Game):
         self.game = game
@@ -239,27 +261,50 @@ class GameSimulator:
         print("initial game state:", json.dumps(self.game.get_game_state(), indent=2))
 
         while self.game.winner is None:
-            current_player = self.game.get_current_player()
-            steps = self.game.roll_dice_take_turn()
-            msg = f"player {current_player.name} rolled {steps} and moved to space {current_player.piece.location.snake_id} (id {current_player.piece.location.id})"
-            if current_player.piece.location.contents in {SpaceContents.SHOT, SpaceContents.DOUBLE_SHOT, SpaceContents.FRIEND_SHOT}:
-                msg += f" and hit a {current_player.piece.location.contents.value.lower().replace("_", " ")}!"
-            print(msg)
+            self.game.get_current_player()
+            self.game.roll_dice_take_turn()
 
         print(f"player {self.game.winner.name} wins!")
         print("final game state:", json.dumps(self.game.get_game_state(), indent=2))
 
+    def reset_game(self) -> None:
+        self.game.winner = None
+        self.game.player_up = 0
+        for player in self.game.players:
+            player.piece.location = self.game.board.get_space(0)
+            player.shots_taken = 0
+            player.spaces_moved = 0
+            player.turns_taken = 0
+
+def easy_side() -> Board:
+    board = RectangleBoard(6, 6)
+    board.add_shot(1, SpaceContents.SHOT)
+    board.add_shot(4, SpaceContents.FRIEND_SHOT)
+    board.add_shot(6, SpaceContents.DOUBLE_SHOT)
+    board.add_shot(17, SpaceContents.FRIEND_SHOT)
+    board.add_shot(19, SpaceContents.FRIEND_SHOT)
+    board.add_shot(22, SpaceContents.SHOT)
+    board.add_shot(24, SpaceContents.SHOT)
+    board.add_shot(31, SpaceContents.DOUBLE_SHOT)
+    board.add_shot(33, SpaceContents.SHOT)
+    # ladders
+    board.add_jump(2, 14)
+    board.add_jump(21, 26)
+    board.add_jump(23, 34)
+    # chutes
+    board.add_jump(31, 5)
+    board.add_jump(19, 14)
+    board.add_jump(22, 9)
+    return board
 
 def main():
-    game = Game.with_rectangle_board(5, 5)
-    game.add_player("alice")
-    game.board.add_shot(23, SpaceContents.SHOT)
-    game.board.add_shot(22, SpaceContents.SHOT)
-    game.board.add_shot(21, SpaceContents.SHOT)
-    game.board.add_shot(20, SpaceContents.SHOT)
+    board = easy_side()
+    game = Game(board)
+    game.add_player("ethan")
+    game.add_player("damon")
+
     gs = GameSimulator(game)
     gs.simulate_game()
     
-
 if __name__ == "__main__":
     main()
