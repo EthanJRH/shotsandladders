@@ -279,8 +279,30 @@ def easy_side() -> Board:
     board.add_jump(22, 9)
     return board
 
+def hard_side() -> Board:
+    board = RectangleBoard(6, 6)
+    board.add_shot(1, SpaceContents.SHOT)
+    board.add_shot(3, SpaceContents.FRIEND_SHOT)
+    board.add_shot(7, SpaceContents.FRIEND_SHOT)
+    board.add_shot(16, SpaceContents.DOUBLE_SHOT)
+    board.add_shot(19, SpaceContents.SHOT)
+    board.add_shot(26, SpaceContents.FRIEND_SHOT)
+    board.add_shot(31, SpaceContents.DOUBLE_SHOT)
+    board.add_shot(33, SpaceContents.SHOT)
+    board.add_shot(35, SpaceContents.SHOT)
+    # ladders
+    board.add_jump(1, 21)
+    board.add_jump(13, 18)
+    board.add_jump(23, 34)
+    # chutes
+    board.add_jump(31, 4)
+    board.add_jump(33, 22)
+    board.add_jump(17, 10)
+    board.add_jump(9, 2)
+    return board
+
 def main():
-    board = easy_side()
+    board = hard_side()
     game = Game(board)
     game.add_player("ethan")
     game.add_player("damon")
