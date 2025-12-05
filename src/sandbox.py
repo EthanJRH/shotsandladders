@@ -24,9 +24,9 @@ class Space:
     snake_id: int | None = None
     contents: SpaceContents | None = None
     coords: tuple[int, int] | None = None
-    prev_id: Space | None = None
-    next_id: Space | None = None
-    jump_to: Space | None = None
+    prev_id: int | None = None
+    next_id: int | None = None
+    jump_to: int | None = None
 
 class Board(ABC):
     """Base board: owns a list of Space objects and common helpers.
@@ -199,10 +199,9 @@ class Game:
             player.take_shot()
             player.take_shot()
 
-    @staticmethod
-    def check_for_jumps(player: Player, space: Space) -> bool:
+    def check_for_jumps(self, player: Player, space: Space) -> bool:
         if space.jump_to is not None:
-            player.piece.location = space.jump_to
+            player.piece.location = self.board.get_space(space.jump_to)
             return True
         return False
     
